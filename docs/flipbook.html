@@ -1,42 +1,76 @@
-<script>
-(async function () {
-  const pdfUrl = "https://rphl66.github.io/jeansellem-pdfs/1971-sandro-adriani.pdf";
-  const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Flipbook PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  const images = [];
+  <!-- StPageFlip -->
+  <link rel="stylesheet" href="https://unpkg.com/stpageflip/dist/css/stpageflip.min.css">
+  <script src="https://unpkg.com/stpageflip/dist/js/stpageflip.min.js"></script>
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+  <!-- PDF.js (bonne version avec worker) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"></script>
 
-    const dataUrl = canvas.toDataURL("image/png");
-    images.push(dataUrl);
+  <style>
+    body {
+      margin: 0;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #flipbook {
+      width: 90vw;
+      height: 90vh;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      border-radius: 6px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="flipbook"></div>
 
-    // 🟢 Debug : insérer les images directement dans la page
-    const img = document.createElement("img");
-    img.src = dataUrl;
-    img.style.width = "200px";
-    document.body.appendChild(img);
-  }
+  <script>
+    async function initFlipbook() {
+      const pdfUrl = "https://rphl66.github.io/jeansellem-pdfs/1971-sandro-adriani.pdf";
+      const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
 
-  console.log("Nombre de pages générées :", images.length);
+      const images = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        images.push(canvas.toDataURL("image/png"));
+      }
 
-  // StPageFlip (désactivé pour test)
-  /*
-  const flipbook = new St.PageFlip(document.getElementById("flipbook"), {
-    width: 600,
-    height: 800,
-    size: "stretch",
-    showCover: false,
-    maxShadowOpacity: 0.5,
-  });
+      const flipbook = new St.PageFlip(document.getElementById("flipbook"), {
+        width: 600,
+        height: 800,
+        size: "stretch",
+        minWidth: 315,
+        maxWidth: 2000,
+        minHeight: 400,
+        maxHeight: 3000,
+        maxShadowOpacity: 0.5,
+        showCover: true,
+        mobileScrollSupport: true
+      });
 
-  flipbook.loadFromImages(images);
-  */
-})();
-</script>
+      flipbook.loadFromImages(images);
+    }
+
+    initFlipbook().catch(err => {
+      console.error("Erreur Flipbook:", err);
+      document.body.innerHTML += "<p style='color:red;'>Erreur: " + err.message + "</p>";
+    });
+  </script>
+</body>
+</html>
