@@ -37,8 +37,10 @@
     .toolbar button:hover, .toolbar a.btn:hover{border-color:#d1d5db}
     .sp{flex:1}
 
-    #scene{position:relative;background:var(--page);border-radius:12px;overflow:hidden;
-           box-shadow:0 10px 30px rgba(0,0,0,.12);height:82vh}
+    #scene{
+      position:relative;background:var(--page);border-radius:12px;overflow:hidden;
+      box-shadow:0 10px 30px rgba(0,0,0,.12);height:82vh /* sera écrasé par ?vh=... */
+    }
     #flipbook{width:100%;height:100%}
     #flipbook .page{background:var(--page)!important}
     #flipbook .page img{
@@ -47,8 +49,10 @@
     }
     #flipbook .page__shadow{box-shadow:inset 0 0 25px rgba(0,0,0,.18)}
 
-    .progress{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-      background:linear-gradient(180deg, rgba(248,245,240,.92), rgba(248,245,240,.96));gap:10px}
+    .progress{
+      position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:linear-gradient(180deg, rgba(248,245,240,.92), rgba(248,245,240,.96));gap:10px
+    }
     .progress .bar{width:min(360px,70%);height:8px;border-radius:99px;background:#e5e7eb;overflow:hidden}
     .progress .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s ease}
     .progress .txt{color:#374151;font-weight:600}
@@ -81,13 +85,16 @@
 
   <script>
   (async () => {
-    // -------- Utilitaires URL --------
+    // -------- Params d’URL --------
     const params = new URLSearchParams(location.search);
     const setParam = (k,v) => { params.set(k,String(v)); location.search = params.toString(); };
+
     const file   = params.get("file")   || "1971-sandro-adriani.pdf"; // PDF par défaut
-    const cover  = params.get("cover")  || "0";                       // 0 double-page, 1 couverture seule
+    const cover  = params.get("cover")  || "0";                       // 0 = double-page, 1 = couverture seule
     const spread = params.get("spread") || "2";                       // 1 = une page, 2 = double-page
-    const q      = Math.min(4, Math.max(1.5, parseFloat(params.get("q") || "3.0"))); // qualité 1.5–4
+    const q      = Math.min(6, Math.max(1.5, parseFloat(params.get("q")  || "3.0"))); // qualité de rendu
+    const s      = Math.max(1,   parseFloat(params.get("s")  || "1"));   // taille d’affichage
+    const vh     = Math.min(98,  Math.max(60, parseFloat(params.get("vh") || "82"))); // hauteur viewer (vh)
 
     // UI titre + download
     const niceName = decodeURIComponent(file.split("/").pop()).replace(/\+/g," ");
@@ -109,17 +116,24 @@
     // ---- Charger le PDF ----
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
 
-    // ---- Dimensions selon 1p/2p ----
+    // ---- Dimensions (avec s & vh) ----
     const scene = document.getElementById("scene");
+    scene.style.height = vh + "vh"; // applique la hauteur demandée
+
     const containerW = scene.clientWidth;
-    const pageW = Math.max(420, Math.min(1200, Math.floor(containerW * (spread === "1" ? 0.98 : 0.48))));
-    const first = await pdf.getPage(1);
-    const base = first.getViewport({ scale: 1 });
+    const pageWBase  = (spread === "1" ? 0.98 : 0.48);
+    const pageW = Math.max(420, Math.min(1600, Math.floor(containerW * pageWBase * s)));
+
+    const firstPage = await pdf.getPage(1);
+    const base = firstPage.getViewport({ scale: 1 });
     const aspect = base.height / base.width;
     const pageH = Math.round(pageW * aspect);
 
-    // ---- Qualité de rendu (nettement plus haut que ta version précédente) ----
-    const scale = Math.min(4, (pageW / base.width) * (window.devicePixelRatio || 1) * q);
+    // Qualité de rendu (HD)
+    const scale = Math.min(
+      6, // cap mémoire
+      (pageW / base.width) * (window.devicePixelRatio || 1) * q
+    );
 
     // ---- Rendu en images HD ----
     const images = [];
@@ -170,8 +184,8 @@
       setTimeout(()=>location.reload(), 250);
     };
 
-    // Zoom (change 'q' puis recharge)
-    document.getElementById("btn-zoom-in").onclick  = () => setParam("q", Math.min(q + 0.5, 4).toFixed(1));
+    // Zoom qualité (modifie q)
+    document.getElementById("btn-zoom-in").onclick  = () => setParam("q", Math.min(q + 0.5, 6).toFixed(1));
     document.getElementById("btn-zoom-out").onclick = () => setParam("q", Math.max(q - 0.5, 1.5).toFixed(1));
 
     // Basculer 1p/2p
