@@ -62,12 +62,12 @@
 
   // Initialiser le flipbook APRÈS avoir toutes les pages
   const flipbook = new St.PageFlip(document.getElementById("flipbook"), {
-    width: 600,
-    height: 800,
-    size: "stretch",
-    showCover: true,
-    maxShadowOpacity: 0.5
-  });
+  width: 600,
+  height: 800,
+  size: "stretch",
+  showCover: false,   // <- désactive la couverture seule
+  maxShadowOpacity: 0.5
+});
 
   // Charger toutes les pages
   flipbook.loadFromImages(pages);
