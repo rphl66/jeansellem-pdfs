@@ -2,10 +2,10 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Flipbook PDF</title>
 
-  <!-- PageFlip (lib flipbook) -->
+  <!-- Page-Flip (lib flipbook) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/css/page-flip.min.css">
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
 
@@ -18,103 +18,146 @@
   </script>
 
   <style>
-    :root {
-      --page-bg: #ffffff;
-      --scene-bg: #f8f5f0;
+    :root{
+      --ink:#111; --muted:#6b7280; --bg:#f8f5f0; --page:#fff; --accent:#0b63ff;
     }
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: var(--scene-bg);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    }
-    .wrap {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 20px 16px;
-    }
-    #flipbook {
-      width: 100%;
-      height: 82vh;              /* hauteur visible */
-      background: var(--page-bg);
-      border-radius: 10px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.12);
-      overflow: hidden;
-    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink)}
 
-    /* Pages plus “propres” */
-    #flipbook .page {
-      background: var(--page-bg) !important;
+    .wrap{max-width:1400px;margin:0 auto;padding:14px}
+    .toolbar{
+      display:flex;align-items:center;gap:10px;
+      background:#fff;border:1px solid #e5e7eb;border-radius:10px;
+      padding:10px 12px;margin:0 0 10px 0;box-shadow:0 2px 12px rgba(0,0,0,.06)
     }
-    #flipbook .page img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      background: var(--page-bg);
+    .toolbar .title{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .toolbar .muted{color:var(--muted);font-weight:500}
+    .toolbar button, .toolbar a.btn{
+      appearance:none;border:1px solid #e5e7eb;background:#fff;border-radius:8px;cursor:pointer;
+      padding:6px 10px;font-weight:600
     }
+    .toolbar button:hover, .toolbar a.btn:hover{border-color:#d1d5db}
+    .toolbar .sp{flex:1}
 
-    /* Gouttière douce */
-    #flipbook .page__shadow {
-      box-shadow: inset 0 0 25px rgba(0,0,0,.18);
+    #scene{
+      position:relative;
+      background:var(--page);border-radius:12px;overflow:hidden;
+      box-shadow:0 10px 30px rgba(0,0,0,.12);height:82vh
     }
+    #flipbook{width:100%;height:100%}
+    #flipbook .page{background:var(--page)!important}
+    #flipbook .page img{width:100%;height:100%;object-fit:contain;display:block;background:var(--page)}
+    #flipbook .page__shadow{box-shadow:inset 0 0 25px rgba(0,0,0,.18)}
+
+    /* Overlay progression */
+    .progress{
+      position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:linear-gradient(180deg, rgba(248,245,240,.92), rgba(248,245,240,.96));
+      gap:10px
+    }
+    .progress .bar{width:min(360px,70%);height:8px;border-radius:99px;background:#e5e7eb;overflow:hidden}
+    .progress .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s ease}
+    .progress .txt{color:#374151;font-weight:600}
+    .hidden{display:none}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div id="flipbook"></div>
+    <div class="toolbar">
+      <div class="title" id="tb-title">Flipbook</div>
+      <span class="muted" id="tb-count">0 / 0</span>
+      <button id="btn-prev" title="Page précédente">◀︎</button>
+      <button id="btn-next" title="Page suivante">▶︎</button>
+      <div class="sp"></div>
+      <button id="btn-full" title="Plein écran">⤢</button>
+      <a id="btn-download" class="btn" download>⭳ Télécharger</a>
+    </div>
+
+    <div id="scene">
+      <div id="flipbook"></div>
+      <div id="progress" class="progress">
+        <div class="txt" id="pg-text">Préparation…</div>
+        <div class="bar"><i id="pg-bar"></i></div>
+      </div>
+    </div>
   </div>
 
   <script>
   (async () => {
-    // ---- Params d'URL ----
+    // -------- Params --------
     const params = new URLSearchParams(location.search);
-    const file  = params.get("file")  || "1971-sandro-adriani.pdf"; // défaut
-    const cover = params.get("cover") || "0";                       // 0 = double-page, 1 = couverture seule
+    const fileParam  = params.get("file")  || "1971-sandro-adriani.pdf"; // défaut
+    const coverParam = params.get("cover") || "0"; // 0=double-page, 1=couverture seule
 
-    // Supporte URL absolue ou relative
-    const pdfUrl = file.startsWith("http") ? file : `./${file}`;
+    // Titre lisible
+    const niceName = decodeURIComponent(fileParam.split("/").pop()).replace(/\+/g," ");
+    document.getElementById("tb-title").textContent = niceName;
 
-    // ---- Charger le PDF et récupérer le ratio réel de page ----
+    // URL absolue/relative sûre
+    const pdfUrl = fileParam.startsWith("http")
+      ? fileParam
+      : new URL(fileParam, location.href).href;
+
+    // Bouton download pointe vers le PDF
+    const dl = document.getElementById("btn-download");
+    dl.href = pdfUrl;
+    dl.download = niceName;
+
+    // -------- Progress UI helpers --------
+    const pg = {
+      el: document.getElementById("progress"),
+      txt: document.getElementById("pg-text"),
+      bar: document.getElementById("pg-bar"),
+      show(msg){ this.el.classList.remove("hidden"); if(msg) this.txt.textContent = msg; },
+      step(i,n){ this.txt.textContent = `Rendu des pages… ${i}/${n}`; this.bar.style.width = `${Math.round((i/n)*100)}%`; },
+      done(){ this.el.classList.add("hidden"); this.bar.style.width="100%"; }
+    };
+    pg.show("Chargement du PDF…");
+
+    // -------- Charger le PDF --------
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+
+    // -------- Calcul dimensions à partir de la 1re page --------
     const firstPage = await pdf.getPage(1);
     const base = firstPage.getViewport({ scale: 1 });
-    const aspect = base.height / base.width; // ~1.414 pour A4
+    const aspect = base.height / base.width; // ex A4 ≈ 1.414
 
-    // ---- Calculer une taille de page cohérente avec la largeur écran ----
-    const container = document.getElementById("flipbook");
-    const containerWidth = container.clientWidth;
-    // on réserve ~48% de la largeur pour 1 page (pour un spread confortable)
-    const pageWidth = Math.max(420, Math.min(900, Math.floor(containerWidth * 0.48)));
-    const pageHeight = Math.round(pageWidth * aspect);
+    const scene = document.getElementById("scene");
+    const containerW = scene.clientWidth;
+    const pageW = Math.max(420, Math.min(900, Math.floor(containerW * 0.48)));
+    const pageH = Math.round(pageW * aspect);
 
-    // Rendu “retina” sans surcharger : cap à x2.2
-    const scale = Math.min(2.2, (pageWidth / base.width) * (window.devicePixelRatio || 1));
+    // Qualité de rendu (retina capée)
+    const scale = Math.min(2.2, (pageW / base.width) * (window.devicePixelRatio || 1));
 
-    // ---- Rendre toutes les pages en images ----
+    // -------- Rendu de toutes les pages en images --------
     const images = [];
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement("canvas");
-      canvas.width  = viewport.width;
-      canvas.height = viewport.height;
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
       const ctx = canvas.getContext("2d", { alpha: false });
       await page.render({ canvasContext: ctx, viewport }).promise;
       images.push(canvas.toDataURL("image/png"));
+      pg.step(i, pdf.numPages);
+      // Libérer la mémoire du canvas au fur et à mesure
+      ctx && ctx.reset && ctx.reset();
     }
 
-    // ---- Initialiser le flipbook avec les bonnes proportions ----
-    const flip = new St.PageFlip(container, {
-      width: pageWidth,
-      height: pageHeight,
+    // -------- Init flipbook --------
+    const flip = new St.PageFlip(document.getElementById("flipbook"), {
+      width: pageW,
+      height: pageH,
       size: "stretch",
       minWidth: 320,
       minHeight: 420,
-      maxWidth: 2200,
-      maxHeight: 3200,
-      showCover: cover === "1",     // ?cover=1 pour couverture seule
-      usePortrait: false,           // force le mode double-page sur large écran
+      maxWidth: 2400,
+      maxHeight: 3400,
+      showCover: coverParam === "1",
+      usePortrait: window.innerWidth < 900, // portrait sur mobile
       flippingTime: 700,
       drawShadow: true,
       maxShadowOpacity: .5,
@@ -122,18 +165,43 @@
     });
 
     flip.loadFromImages(images);
+    pg.done();
 
-    // ---- Recalcule si la fenêtre change de taille (simple) ----
-    let resizeTimer;
-    window.addEventListener("resize", () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => location.reload(), 250);
+    // -------- UI : page counter + navigation --------
+    const count = document.getElementById("tb-count");
+    const updateCounter = () => {
+      const curr = flip.getCurrentPageIndex() + 1;
+      const total = flip.getPageCount();
+      count.textContent = `${curr} / ${total}`;
+    };
+    flip.on("flip", updateCounter);
+    updateCounter();
+
+    document.getElementById("btn-prev").onclick = () => flip.flipPrev();
+    document.getElementById("btn-next").onclick = () => flip.flipNext();
+
+    // -------- Plein écran --------
+    const fullBtn = document.getElementById("btn-full");
+    fullBtn.onclick = async () => {
+      if (!document.fullscreenElement) {
+        await scene.requestFullscreen().catch(()=>{});
+      } else {
+        await document.exitFullscreen().catch(()=>{});
+      }
+      // rafraîchir l’affichage après un petit délai
+      setTimeout(()=>location.reload(), 250);
+    };
+
+    // -------- Reflow simple au resize --------
+    let t; window.addEventListener("resize", () => {
+      clearTimeout(t); t = setTimeout(()=>location.reload(), 250);
     });
+
   })().catch(err => {
     console.error(err);
     const el = document.createElement("pre");
-    el.style.cssText = "max-width:900px;margin:20px auto;color:#b00020;white-space:pre-wrap";
-    el.textContent = "Erreur flipbook : " + err.message;
+    el.style.cssText="max-width:900px;margin:20px auto;color:#b00020;white-space:pre-wrap";
+    el.textContent = "Erreur flipbook : " + err.message + "\nAstuce : vérifie ?file=… et que le PDF est public.";
     document.body.appendChild(el);
   });
   </script>
