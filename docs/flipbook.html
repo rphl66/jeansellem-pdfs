@@ -9,9 +9,11 @@
   <link rel="stylesheet" href="https://unpkg.com/stpageflip/dist/css/stpageflip.min.css">
   <script src="https://unpkg.com/stpageflip/dist/js/stpageflip.min.js"></script>
 
-  <!-- PDF.js (bonne version avec worker) -->
+  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"></script>
+  <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf']; // 👈 correction ici
+  </script>
 
   <style>
     body {
@@ -55,11 +57,6 @@
         width: 600,
         height: 800,
         size: "stretch",
-        minWidth: 315,
-        maxWidth: 2000,
-        minHeight: 400,
-        maxHeight: 3000,
-        maxShadowOpacity: 0.5,
         showCover: true,
         mobileScrollSupport: true
       });
