@@ -12,7 +12,7 @@
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
-    const pdfjsLib = window['pdfjs-dist/build/pdf']; // 👈 correction ici
+    const pdfjsLib = window['pdfjs-dist/build/pdf']; // 👈 nécessaire pour PDF.js
   </script>
 
   <style>
@@ -53,13 +53,17 @@
         images.push(canvas.toDataURL("image/png"));
       }
 
-      const flipbook = new St.PageFlip(document.getElementById("flipbook"), {
-        width: 600,
-        height: 800,
-        size: "stretch",
-        showCover: true,
-        mobileScrollSupport: true
-      });
+      // ✅ Correction ici : c’est pageFlip.PageFlip et pas St.PageFlip
+      const flipbook = new pageFlip.PageFlip(
+        document.getElementById("flipbook"),
+        {
+          width: 600,
+          height: 800,
+          size: "stretch",
+          showCover: true,
+          mobileScrollSupport: true
+        }
+      );
 
       flipbook.loadFromImages(images);
     }
