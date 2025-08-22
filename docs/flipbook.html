@@ -6,13 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- StPageFlip -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/css/stpageflip.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/js/stpageflip.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/css/page-flip.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
 
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
-    const pdfjsLib = window['pdfjs-dist/build/pdf']; 
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
   </script>
@@ -55,8 +54,8 @@
         images.push(canvas.toDataURL("image/png"));
       }
 
-      // ✅ Ici : on appelle directement PageFlip
-      const flipbook = new PageFlip(
+      // ✅ Ici la bonne initialisation
+      const flipbook = new St.PageFlip(
         document.getElementById("flipbook"),
         {
           width: 600,
