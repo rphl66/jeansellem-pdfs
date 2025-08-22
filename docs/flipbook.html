@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- StPageFlip -->
-  <link rel="stylesheet" href="https://unpkg.com/stpageflip/dist/css/stpageflip.min.css">
-  <script src="https://unpkg.com/stpageflip/dist/js/stpageflip.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/css/stpageflip.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/js/stpageflip.min.js"></script>
 
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -55,8 +55,8 @@
         images.push(canvas.toDataURL("image/png"));
       }
 
-      // ✅ Ici : utiliser window.StPageFlip
-      const flipbook = new window.StPageFlip.PageFlip(
+      // ✅ Ici : on appelle directement PageFlip
+      const flipbook = new PageFlip(
         document.getElementById("flipbook"),
         {
           width: 600,
