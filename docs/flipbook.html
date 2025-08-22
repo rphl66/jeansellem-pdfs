@@ -36,15 +36,13 @@
 
 <script>
 (async function () {
-  // 🔗 URL du PDF
   const pdfUrl = "https://rphl66.github.io/jeansellem-pdfs/1971-sandro-adriani.pdf";
 
-  // Charger le PDF avec PDF.js
+  // Charger le PDF
   const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
 
-  // Préparer la liste d’images
-  const pages = [];
-
+  // Rendre toutes les pages en images
+  const images = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: 1.5 });
@@ -52,25 +50,20 @@
     const ctx = canvas.getContext("2d");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-
-    // Rendu de la page → attendre avant de continuer
     await page.render({ canvasContext: ctx, viewport }).promise;
-
-    // Ajouter l'image à la liste
-    pages.push(canvas.toDataURL("image/png"));
+    images.push(canvas.toDataURL("image/png"));
   }
 
-  // Initialiser le flipbook APRÈS avoir toutes les pages
+  // Initialiser le flipbook une fois toutes les pages prêtes
   const flipbook = new St.PageFlip(document.getElementById("flipbook"), {
-  width: 600,
-  height: 800,
-  size: "stretch",
-  showCover: false,   // <- désactive la couverture seule
-  maxShadowOpacity: 0.5
-});
+    width: 600,
+    height: 800,
+    size: "stretch",
+    showCover: false, // on veut toutes les pages
+    maxShadowOpacity: 0.5,
+  });
 
-  // Charger toutes les pages
-  flipbook.loadFromImages(pages);
+  flipbook.loadFromImages(images);
 })();
 </script>
 
