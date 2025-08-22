@@ -12,7 +12,9 @@
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
-    const pdfjsLib = window['pdfjs-dist/build/pdf']; // 👈 nécessaire pour PDF.js
+    const pdfjsLib = window['pdfjs-dist/build/pdf']; 
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
   </script>
 
   <style>
@@ -53,8 +55,8 @@
         images.push(canvas.toDataURL("image/png"));
       }
 
-      // ✅ Correction ici : c’est pageFlip.PageFlip et pas St.PageFlip
-      const flipbook = new pageFlip.PageFlip(
+      // ✅ Ici : utiliser window.StPageFlip
+      const flipbook = new window.StPageFlip.PageFlip(
         document.getElementById("flipbook"),
         {
           width: 600,
