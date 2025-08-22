@@ -1,78 +1,141 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Flipbook PDF</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- StPageFlip -->
+  <!-- PageFlip (lib flipbook) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/css/page-flip.min.css">
   <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
 
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
   </script>
 
   <style>
-    body {
+    :root {
+      --page-bg: #ffffff;
+      --scene-bg: #f8f5f0;
+    }
+    html, body {
+      height: 100%;
       margin: 0;
-      background: #f4f4f4;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      background: var(--scene-bg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px 16px;
     }
     #flipbook {
-      width: 90vw;
-      height: 90vh;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
-      border-radius: 6px;
-      background: #fff;
+      width: 100%;
+      height: 82vh;              /* hauteur visible */
+      background: var(--page-bg);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.12);
+      overflow: hidden;
+    }
+
+    /* Pages plus “propres” */
+    #flipbook .page {
+      background: var(--page-bg) !important;
+    }
+    #flipbook .page img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: var(--page-bg);
+    }
+
+    /* Gouttière douce */
+    #flipbook .page__shadow {
+      box-shadow: inset 0 0 25px rgba(0,0,0,.18);
     }
   </style>
 </head>
 <body>
-  <div id="flipbook"></div>
+  <div class="wrap">
+    <div id="flipbook"></div>
+  </div>
 
   <script>
-    async function initFlipbook() {
-      const pdfUrl = "https://rphl66.github.io/jeansellem-pdfs/1971-sandro-adriani.pdf";
-      const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+  (async () => {
+    // ---- Params d'URL ----
+    const params = new URLSearchParams(location.search);
+    const file  = params.get("file")  || "1971-sandro-adriani.pdf"; // défaut
+    const cover = params.get("cover") || "0";                       // 0 = double-page, 1 = couverture seule
 
-      const images = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        images.push(canvas.toDataURL("image/png"));
-      }
+    // Supporte URL absolue ou relative
+    const pdfUrl = file.startsWith("http") ? file : `./${file}`;
 
-      // ✅ Ici la bonne initialisation
-      const flipbook = new St.PageFlip(
-        document.getElementById("flipbook"),
-        {
-          width: 600,
-          height: 800,
-          size: "stretch",
-          showCover: true,
-          mobileScrollSupport: true
-        }
-      );
+    // ---- Charger le PDF et récupérer le ratio réel de page ----
+    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+    const firstPage = await pdf.getPage(1);
+    const base = firstPage.getViewport({ scale: 1 });
+    const aspect = base.height / base.width; // ~1.414 pour A4
 
-      flipbook.loadFromImages(images);
+    // ---- Calculer une taille de page cohérente avec la largeur écran ----
+    const container = document.getElementById("flipbook");
+    const containerWidth = container.clientWidth;
+    // on réserve ~48% de la largeur pour 1 page (pour un spread confortable)
+    const pageWidth = Math.max(420, Math.min(900, Math.floor(containerWidth * 0.48)));
+    const pageHeight = Math.round(pageWidth * aspect);
+
+    // Rendu “retina” sans surcharger : cap à x2.2
+    const scale = Math.min(2.2, (pageWidth / base.width) * (window.devicePixelRatio || 1));
+
+    // ---- Rendre toutes les pages en images ----
+    const images = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width  = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      images.push(canvas.toDataURL("image/png"));
     }
 
-    initFlipbook().catch(err => {
-      console.error("Erreur Flipbook:", err);
-      document.body.innerHTML += "<p style='color:red;'>Erreur: " + err.message + "</p>";
+    // ---- Initialiser le flipbook avec les bonnes proportions ----
+    const flip = new St.PageFlip(container, {
+      width: pageWidth,
+      height: pageHeight,
+      size: "stretch",
+      minWidth: 320,
+      minHeight: 420,
+      maxWidth: 2200,
+      maxHeight: 3200,
+      showCover: cover === "1",     // ?cover=1 pour couverture seule
+      usePortrait: false,           // force le mode double-page sur large écran
+      flippingTime: 700,
+      drawShadow: true,
+      maxShadowOpacity: .5,
+      mobileScrollSupport: true
     });
+
+    flip.loadFromImages(images);
+
+    // ---- Recalcule si la fenêtre change de taille (simple) ----
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => location.reload(), 250);
+    });
+  })().catch(err => {
+    console.error(err);
+    const el = document.createElement("pre");
+    el.style.cssText = "max-width:900px;margin:20px auto;color:#b00020;white-space:pre-wrap";
+    el.textContent = "Erreur flipbook : " + err.message;
+    document.body.appendChild(el);
+  });
   </script>
 </body>
 </html>
