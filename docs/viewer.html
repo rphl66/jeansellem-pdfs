@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PDF Viewer</title>
+<style>
+  :root{
+    --bg: #0b0b0b;        /* fond */
+    --panel:#161616;      /* barre */
+    --text:#e9e9e9;       /* texte */
+    --muted:#9aa0a6;
+    --accent:#3ea0ff;
+    --page-gap: 18px;     /* écart entre pages */
+    --page-shadow: 0 8px 26px rgba(0,0,0,.32);
+    --radius: 10px;       /* arrondi pages */
+    --max-width: 1200px;  /* largeur max (fit largeur écran sinon) */
+    --font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:var(--font)}
+  .app{height:100dvh;display:grid;grid-template-rows:auto 1fr}
+  .toolbar{
+    display:flex;align-items:center;gap:.5rem;
+    padding:.6rem .9rem;background:var(--panel);border-bottom:1px solid #1f1f1f;position:sticky;top:0;z-index:2
+  }
+  .spacer{flex:1}
+  .btn{
+    appearance:none;border:0;border-radius:.6rem;cursor:pointer;
+    padding:.45rem .7rem;background:#1f1f1f;color:var(--text);transition:.15s
+  }
+  .btn:hover{background:#232323}
+  .btn.primary{background:var(--accent);color:#061321}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .label{color:var(--muted)}
+  .stage{height:100%;overflow:auto}
+  .track{margin:2vh auto;max-width:var(--max-width);padding:0 2vw}
+  .page{display:flex;justify-content:center;margin-bottom:var(--page-gap)}
+  canvas{
+    display:block;background:#fff;border-radius:var(--radius);box-shadow:var(--page-shadow);
+    width:100%;height:auto  /* largeur ajustée en JS */
+  }
+  .status{
+    position:fixed;left:12px;bottom:12px;background:#111a;border:1px solid #2226;border-radius:10px;
+    padding:.4rem .6rem;color:var(--muted);backdrop-filter: blur(6px);font-size:.9rem
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <button class="btn" id="prev" title="Page précédente (←)">←</button>
+    <span class="label" id="pageInfo">Page 1 / 1</span>
+    <button class="btn" id="next" title="Page suivante (→)">→</button>
+
+    <span class="spacer"></span>
+
+    <button class="btn" id="zoomOut" title="Zoom -">−</button>
+    <span class="label" id="zoomLabel">100%</span>
+    <button class="btn" id="zoomIn" title="Zoom +">+</button>
+    <button class="btn" id="fit" title="Ajuster la largeur">⇱⇲</button>
+
+    <span class="spacer"></span>
+
+    <a class="btn primary" id="openRaw" target="_blank" rel="noopener">Ouvrir le PDF</a>
+  </div>
+
+  <div class="stage">
+    <div class="track" id="track"></div>
+  </div>
+</div>
+<div class="status" id="status">Prêt</div>
+
+<!-- PDF.js -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+  // --------- paramètres ----------
+  const qs   = new URLSearchParams(location.search);
+  const file = qs.get("file") || "1971-sandro-adriani.pdf";  // chemin par défaut dans /docs
+  const startZoom = parseFloat(qs.get("zoom") || "1");        // 1 = 100%
+  const fitOnLoad = (qs.get("fit") || "1") === "1";           // ajuste à la largeur au chargement
+
+  // --------- DOM ----------
+  const track = document.getElementById("track");
+  const pageInfo = document.getElementById("pageInfo");
+  const zoomLabel = document.getElementById("zoomLabel");
+  const statusEl = document.getElementById("status");
+  document.getElementById("openRaw").href = file;
+
+  const prev = document.getElementById("prev");
+  const next = document.getElementById("next");
+  const zoomIn = document.getElementById("zoomIn");
+  const zoomOut = document.getElementById("zoomOut");
+  const fitBtn = document.getElementById("fit");
+
+  // --------- état ----------
+  let pdf=null, pages=[], scale=startZoom, baseViewport=null, current=1;
+
+  const setStatus = t => statusEl.textContent = t;
+  const setZoomLabel = () => zoomLabel.textContent = Math.round(scale*100)+"%";
+
+  const DPR = Math.max(1, devicePixelRatio || 1);
+
+  function computeFitScale(v){ // fit largeur + marges/padding
+    const styleTrack = getComputedStyle(track);
+    const padX = parseFloat(styleTrack.paddingLeft) + parseFloat(styleTrack.paddingRight);
+    const availW = track.clientWidth - padX;
+    return Math.max(.25, Math.min(4, availW / v.width));
+  }
+
+  async function renderPage(i){
+    const p = pages[i-1];
+    if (!p || p.rendered) return;
+    const page = await pdf.getPage(i);
+
+    // viewport “base” (scale=1) mémorisé sur page 1
+    const v1 = page.getViewport({scale:1});
+    if (!baseViewport) baseViewport = v1;
+
+    const v  = page.getViewport({scale});
+    const cnv = p.canvas;
+    const ctx = cnv.getContext("2d",{alpha:false});
+
+    // largeur max = track width, on calcule “fit width” pour le style
+    const cssW = Math.min(v.width, track.clientWidth);
+    cnv.style.width = cssW + "px";
+    cnv.style.height = (cssW * v.height / v.width) + "px";
+
+    // rendu HiDPI net
+    const w = Math.floor(v.width  * DPR);
+    const h = Math.floor(v.height * DPR);
+    cnv.width = w; cnv.height = h;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    await page.render({canvasContext:ctx, viewport:v}).promise;
+    p.rendered = true;
+  }
+
+  function updatePageInfo(){
+    // page la plus centrée dans la fenêtre
+    let best=1, bestDist=1e9, y = document.documentElement.scrollTop || document.body.scrollTop;
+    const rect = track.getBoundingClientRect();
+    const center = window.innerHeight/2;
+    pages.forEach((p,idx)=>{
+      const r = p.canvas.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height/2 - center);
+      if (d < bestDist){ bestDist=d; best=idx+1; }
+    });
+    current = best;
+    pageInfo.textContent = `Page ${current} / ${pdf.numPages}`;
+  }
+
+  async function main(){
+    try{
+      setStatus("Chargement…");
+      pdf = await pdfjsLib.getDocument(file).promise;
+
+      // créer les conteneurs/canvas
+      for (let i=1;i<=pdf.numPages;i++){
+        const wrap = document.createElement("div"); wrap.className="page";
+        const cnv  = document.createElement("canvas");
+        wrap.appendChild(cnv); track.appendChild(wrap);
+        pages.push({canvas:cnv, rendered:false});
+      }
+
+      // lazy render : on rend la page visible & la suivante en réserve
+      const io = new IntersectionObserver((entries)=>{
+        entries.forEach(e=>{
+          if (e.isIntersecting){
+            const idx = pages.findIndex(p => p.canvas === e.target);
+            renderPage(idx+1);
+            if (idx+2 <= pdf.numPages) renderPage(idx+2);
+          }
+        });
+      }, {root:null, rootMargin:"600px 0px", threshold:0});
+
+      pages.forEach(p => io.observe(p.canvas));
+
+      // premier rendu “fit width” si demandé
+      if (fitOnLoad){
+        const first = await pdf.getPage(1);
+        const v1 = first.getViewport({scale:1});
+        scale = computeFitScale(v1);
+      }
+      setZoomLabel();
+      setStatus("Prêt");
+
+      // évènements
+      prev.onclick = ()=>{ scrollToPage(Math.max(1, current-1)); };
+      next.onclick = ()=>{ scrollToPage(Math.min(pdf.numPages, current+1)); };
+      zoomIn.onclick  = ()=>{ scale=Math.min(4, scale*1.1); rerenderAllVisible(); };
+      zoomOut.onclick = ()=>{ scale=Math.max(.25, scale/1.1); rerenderAllVisible(); };
+      fitBtn.onclick  = async ()=>{
+        const first = await pdf.getPage(1);
+        const v1 = first.getViewport({scale:1});
+        scale = computeFitScale(v1); rerenderAllVisible();
+      };
+
+      window.addEventListener("scroll", throttle(updatePageInfo, 100));
+      window.addEventListener("resize", debounce(()=>{ if (baseViewport){ scale = computeFitScale(baseViewport); rerenderAllVisible(); }}, 150));
+
+      // lancer un rendu immédiat de la 1re page
+      renderPage(1); updatePageInfo();
+    }catch(e){
+      console.error(e);
+      setStatus("Erreur : " + e.message);
+      alert("Impossible de charger le PDF.");
+    }
+  }
+
+  function rerenderAllVisible(){
+    setZoomLabel();
+    // “oublie” les rendus pour les pages visibles pour forcer un rerender net
+    pages.forEach(p => {
+      const r = p.canvas.getBoundingClientRect();
+      const vis = r.bottom > 0 && r.top < innerHeight*1.4;
+      if (vis) p.rendered=false;
+    });
+    // déclenche un cycle en simulant une petite scroll
+    window.scrollBy(0,1); window.scrollBy(0,-1);
+  }
+
+  function scrollToPage(i){
+    const y = pages[i-1].canvas.getBoundingClientRect().top + window.scrollY - 70; // 70px ~ toolbar
+    window.scrollTo({top:y, behavior:"smooth"});
+  }
+
+  // utilitaires
+  function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
+  function throttle(fn,ms){let t=0;return(...a)=>{const now=Date.now();if(now-t>ms){t=now;fn(...a)}}}
+
+  main();
+</script>
+</body>
+</html>
