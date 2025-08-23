@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Flipbook PDF</title>
+
+<!-- PageFlip (effet livre) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/css/page-flip.min.css">
+
+<style>
+  :root { --bg:#f6f6f6; --paper:#fff; --ink:#111; --muted:#6b7280; --accent:#0b63ff; }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:var(--ink)}
+  .wrap{max-width:1400px;margin:0 auto;padding:14px}
+  .toolbar{
+    display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e5e7eb;
+    border-radius:12px;padding:8px 10px;margin:0 0 10px;box-shadow:0 2px 10px rgba(0,0,0,.06)
+  }
+  .toolbar .title{flex:1;min-width:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toolbar button,.toolbar a.btn{
+    appearance:none;border:1px solid #e5e7eb;background:#fff;border-radius:10px;cursor:pointer;
+    padding:6px 10px;font-weight:600
+  }
+  .toolbar button:hover,.toolbar a.btn:hover{border-color:#d1d5db}
+  #scene{position:relative;background:var(--paper);border-radius:12px;overflow:hidden;
+         box-shadow:0 10px 30px rgba(0,0,0,.12);height:84vh}
+  #book{width:100%;height:100%}
+  #book .page{background:var(--paper)!important}
+  #book .page img{width:100%;height:100%;object-fit:contain;display:block;background:var(--paper)}
+  .progress{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:linear-gradient(180deg, rgba(246,246,246,.95), rgba(246,246,246,.98));gap:10px}
+  .progress .bar{width:min(360px,70%);height:8px;border-radius:99px;background:#e5e7eb;overflow:hidden}
+  .progress .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s ease}
+  .progress .txt{color:#374151;font-weight:600}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <div class="title" id="tb-title">Flipbook</div>
+      <span id="tb-count" style="color:var(--muted);font-weight:600">0 / 0</span>
+      <button id="btn-prev" title="Page précédente">◀︎</button>
+      <button id="btn-next" title="Page suivante">▶︎</button>
+      <div style="flex:1"></div>
+      <button id="btn-zoom-out" title="Qualité –">−</button>
+      <button id="btn-zoom-in"  title="Qualité +">＋</button>
+      <button id="btn-spread"   title="Basculer 1p/2p">⇆ 1p/2p</button>
+      <button id="btn-full"     title="Plein écran">⤢</button>
+      <a id="btn-download" class="btn" download>⭳ Télécharger</a>
+    </div>
+
+    <div id="scene">
+      <div id="book"></div>
+      <div id="progress" class="progress">
+        <div class="txt" id="pg-text">Chargement du PDF…</div>
+        <div class="bar"><i id="pg-bar"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Librairies depuis CDN -->
+  <script>
+    const PDFJS_VER = "3.11.174";
+    // PDF.js core + worker
+    document.write('<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@'+PDFJS_VER+'/build/pdf.min.js"><\/script>');
+  </script>
+  <script>
+    // Indiquer le worker (même version)
+    if (!window.pdfjsLib) { alert("PDF.js non chargé"); }
+    else {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@"+PDFJS_VER+"/build/pdf.worker.min.js";
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/stpageflip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+
+  <script>
+  (async () => {
+    // ---- URL params ----
+    const params = new URLSearchParams(location.search);
+    const file   = params.get("file")   || "1971-sandro-adriani.pdf"; // PDF par défaut (dans /docs)
+    const spread = params.get("spread") === "1" ? "1" : "2";          // "1" = 1 page, "2" = double
+    const q      = Math.max(1.5, Math.min(4.0, parseFloat(params.get("q") || "3.2"))); // qualité
+
+    // Titre + téléchargement
+    const pdfUrl = file.startsWith("http") ? file : new URL(file, location.href).href;
+    const niceName = decodeURIComponent(pdfUrl.split("/").pop()).replace(/\+/g," ");
+    document.getElementById("tb-title").textContent = niceName;
+    const dl = document.getElementById("btn-download"); dl.href = pdfUrl; dl.download = niceName;
+
+    // Progress helpers
+    const pg = {
+      el: document.getElementById("progress"),
+      txt: document.getElementById("pg-text"),
+      bar: document.getElementById("pg-bar"),
+      show(m){ this.el.classList.remove("hidden"); if(m) this.txt.textContent=m; },
+      step(i,n){ this.txt.textContent = `Rendu en HD… ${i}/${n}`; this.bar.style.width = `${Math.round(i/n*100)}%`; },
+      done(){ this.el.classList.add("hidden"); this.bar.style.width="100%"; }
+    };
+
+    // ---- Charge le PDF ----
+    const loadingTask = pdfjsLib.getDocument({ url: pdfUrl, withCredentials:false });
+    const pdf = await loadingTask.promise;
+
+    // ---- Taille cible + échelle (netteté) ----
+    const scene = document.getElementById("scene");
+    const first = await pdf.getPage(1);
+    const base  = first.getViewport({ scale: 1 });
+    const aspect = base.height / base.width;
+    const containerW = scene.clientWidth;
+    const targetW = Math.max(480, Math.min(1200, Math.floor(containerW * (spread==="1" ? 0.98 : 0.48))));
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    const scale = Math.min(4, (targetW / base.width) * dpr * q); // qualité élevée mais raisonnable
+
+    // ---- Rendu en images HD ----
+    const images = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext("2d", { alpha:false });
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      images.push(canvas.toDataURL("image/png"));
+      pg.step(i, pdf.numPages);
+    }
+
+    // ---- Init PageFlip ----
+    const flip = new St.PageFlip(document.getElementById("book"), {
+      width: Math.round(targetW),
+      height: Math.round(targetW * aspect),
+      size: "stretch",
+      minWidth: 320,  minHeight: 420,
+      maxWidth: 2400, maxHeight: 3400,
+      showCover: false,
+      usePortrait: (spread === "1"),
+      flippingTime: 650,
+      drawShadow: true,
+      mobileScrollSupport: true
+    });
+    flip.loadFromImages(images);
+    pg.done();
+
+    // ---- UI ----
+    const count = document.getElementById("tb-count");
+    const refreshCount = () => { count.textContent = `${flip.getCurrentPageIndex()+1} / ${flip.getPageCount()}`; };
+    flip.on("flip", refreshCount); refreshCount();
+
+    document.getElementById("btn-prev").onclick = () => flip.flipPrev();
+    document.getElementById("btn-next").onclick = () => flip.flipNext();
+    document.getElementById("btn-full").onclick = async () => {
+      const scene = document.getElementById("scene");
+      if (!document.fullscreenElement) await scene.requestFullscreen().catch(()=>{});
+      else await document.exitFullscreen().catch(()=>{});
+      setTimeout(()=>location.reload(), 250);
+    };
+    const setParam = (k,v) => { params.set(k,String(v)); location.search = params.toString(); };
+    document.getElementById("btn-zoom-in").onclick  = () => setParam("q", Math.min(q+0.4, 4).toFixed(1));
+    document.getElementById("btn-zoom-out").onclick = () => setParam("q", Math.max(q-0.4, 1.5).toFixed(1));
+    document.getElementById("btn-spread").onclick   = () => setParam("spread", spread==="1" ? "2" : "1");
+
+    // Reflow simple au resize
+    let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(()=>location.reload(), 250); });
+
+  })().catch(err => {
+    console.error(err);
+    const el = document.createElement("div");
+    el.style.cssText="max-width:900px;margin:20px auto;color:#b00020;background:#fff;padding:14px;border-radius:10px";
+    el.innerHTML = "<b>Erreur flipbook :</b> " + (err && err.message ? err.message : err);
+    document.body.appendChild(el);
+  });
+  </script>
+</body>
+</html>
