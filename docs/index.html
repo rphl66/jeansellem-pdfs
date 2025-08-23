@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JeanSellem PDFs</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;padding:24px;line-height:1.5}
@@ -14,10 +14,17 @@
   <h1>JeanSellem PDFs</h1>
   <ul>
     <li>
-      <a href="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/web/viewer.html?file=https://rphl66.github.io/jeansellem-pdfs/docs/1971-sandro-adriani.pdf#pagemode=none&zoom=page-width">
-        Voir « 1971 Sandro Adriani »
-      </a>
+      <a id="v1" href="#">Voir « 1971 Sandro Adriani »</a>
     </li>
   </ul>
+
+  <script>
+    // URL du PDF (raw + URL-encodée pour le paramètre ?file=)
+    const pdfUrl = 'https://raw.githubusercontent.com/rphl66/jeansellem-pdfs/main/docs/1971-sandro-adriani.pdf';
+    const viewer = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/web/viewer.html';
+    const opts   = '#pagemode=none&zoom=page-width';
+
+    document.getElementById('v1').href = `${viewer}?file=${encodeURIComponent(pdfUrl)}${opts}`;
+  </script>
 </body>
 </html>
